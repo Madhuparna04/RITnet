@@ -27,7 +27,7 @@ To test the result:
  
 ```python test.py --model densenet --load best_model.pkl --bs 4 --dataset Semantic_Segmentation_Dataset/```
 
-If you type in ```python test.py```, the batch size will be 8.
+If you type in ```python test.py```, the batch size will be 8. The default settings can be changed in ```opt.py```. In our profiling process, we set the batch size to 1.
 
 ## Contents in the zip folder
 ```
