@@ -189,6 +189,35 @@ def get_predictions(output):
     indices = indices.view(bs,h,w) # bs x h x w
     return indices
 
+# This function is written by Ying @UIUC RSim group. In this case, we have assumed the batch size is 1.
+def getCoordinates(predict):
+    pupilPixel = np.where(predict[0].cpu().numpy() == 3)
+    xMin = min(pupilPixel[0])
+    xMax = max(pupilPixel[0])
+    yMin = min(pupilPixel[1])
+    yMax = max(pupilPixel[1])
+    delta = (xMax - xMin) - (yMax - yMin)
+    
+    if delta >= 0:
+        xCenter = int((xMin + xMax) / 2)
+        xMin_yMin = min(pupilPixel[1][np.where(pupilPixel[0] == xMin)])
+        xMin_yMax = max(pupilPixel[1][np.where(pupilPixel[0] == xMin)])
+        xMin_yCenter = (xMin_yMin + xMin_yMax) / 2
+        xMax_yMin = min(pupilPixel[1][np.where(pupilPixel[0] == xMax)])
+        xMax_yMax = max(pupilPixel[1][np.where(pupilPixel[0] == xMax)])
+        xMax_yCenter = (xMax_yMin + xMax_yMax) / 2
+        yCenter = int((xMin_yCenter + xMax_yCenter) / 2)
+    elif delta < 0:
+        yCenter = int((yMin + yMax) / 2)
+        yMin_xMin = min(pupilPixel[0][np.where(pupilPixel[1] == yMin)])
+        yMin_xMax = max(pupilPixel[0][np.where(pupilPixel[1] == yMin)])
+        yMin_xCenter = (yMin_xMin + yMin_xMax) / 2
+        yMax_xMin = min(pupilPixel[0][np.where(pupilPixel[1] == yMax)])
+        yMax_xMax = max(pupilPixel[0][np.where(pupilPixel[1] == yMax)])
+        yMax_xCenter = (yMax_xMin + yMax_xMax) / 2
+        xCenter = int((yMin_xCenter + yMax_xCenter) / 2)
+    
+    return xCenter, yCenter
 
 class Logger():
     def __init__(self, output_name):

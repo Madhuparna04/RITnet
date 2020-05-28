@@ -16,6 +16,8 @@ from opt import parse_args
 from models import model_dict
 from tqdm import tqdm
 from utils import get_predictions
+from utils import getCoordinates
+import time
 #%%
 
 """
@@ -88,9 +90,16 @@ if __name__ == '__main__':
     with torch.no_grad():
         for i, batchdata in tqdm(enumerate(testloader),total=len(testloader)):
             img,labels,index,x,y= batchdata
-            data = img.to(device)       
-            output = model(data)            
+            data = img.to(device) 
+            output = model(data)        
             predict = get_predictions(output)
+
+            # The following function is written by Ying @UIUC RSim group. It is used to get the coordinates of the pupil center. You may modify that accordingly. It is in utils.py.
+            xCenter, yCenter = getCoordinates(predict)
+            print(xCenter)
+            print(yCenter)
+
+            # The following for-loop is used to save the segmentation results.
             for j in range (len(index)):       
                 np.save('test/labels/{}.npy'.format(index[j]),predict[j].cpu().numpy())
                 try:
@@ -104,9 +113,10 @@ if __name__ == '__main__':
                 img_orig = np.array(img_orig)
                 combine = np.hstack([img_orig,pred_img])
                 plt.imsave('test/mask/{}.jpg'.format(index[j]),combine)
-            
-            count = count + 1
-            if (count == 20):
-                break
 
+            count = count + 1
+            
+            if (count == 10):
+                break
+            
     os.rename('test',args.save)
