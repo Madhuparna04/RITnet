@@ -83,30 +83,45 @@ if __name__ == '__main__':
     os.makedirs('test/output/',exist_ok=True)
     os.makedirs('test/mask/',exist_ok=True)
 
-    count = 0
-    
+    # This is the distance from the camera to an eye in inch
+    dist = 2.0
+
     with torch.no_grad():
         for i, batchdata in tqdm(enumerate(testloader),total=len(testloader)):
             img,labels,index,x,y= batchdata
-            data = img.to(device)       
-            output = model(data)            
+            data = img.to(device)
+            output = model(data)
             predict = get_predictions(output)
-            for j in range (len(index)):       
+
+            # The following function is written by Ying @UIUC RSim group. It is used to get the coordinates of the pupil center. You may modify that accordingly. It is in utils.py.
+            xCenter, yCenter = getCoordinates(predict)
+            # print(xCenter)
+            # print(yCenter)
+
+            deltaX = (xCenter - 320) / 500 * 6.95       # This is the conversion from a pixel to inch.
+            deltaY = (yCenter - 200) / 500 * 6.95       # Same as above.
+            vector = [deltaX, deltaY, dist]             # This is the vectore from the pupil to the eye-tracking camera.
+
+
+            # The following for-loop is used to save the segmentation results.
+            for j in range (len(index)):
                 np.save('test/labels/{}.npy'.format(index[j]),predict[j].cpu().numpy())
                 try:
                     plt.imsave('test/output/{}.jpg'.format(index[j]),255*labels[j].cpu().numpy())
                 except:
                     pass
-                
+
                 pred_img = predict[j].cpu().numpy()/3.0
                 inp = img[j].squeeze() * 0.5 + 0.5
                 img_orig = np.clip(inp,0,1)
                 img_orig = np.array(img_orig)
                 combine = np.hstack([img_orig,pred_img])
                 plt.imsave('test/mask/{}.jpg'.format(index[j]),combine)
-            
-            count = count + 1
-            if (count == 20):
-                break
+
+            # count = count + 1
+
+            # if (count == 10):
+            #     break
 
     os.rename('test',args.save)
+
