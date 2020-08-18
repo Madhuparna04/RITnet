@@ -173,6 +173,43 @@ def compute_mean_iou(flat_pred, flat_label,info=False):
     mean_iou = np.mean(Intersect / Union)
     return mean_iou
 
+# This function is written by Ying @UIUC RSim group. In this case, we have assumed the batch size is 1.
+def getCoordinates(predict):
+    pupilPixel = np.where(predict[0].cpu().numpy() == 3)                # There are four values (0, 1, 2, 3) in the segmentation result arrays. Value 3 indicates the pixel for pupil.
+                                                                        # pupilPixel[0] hass the x-values of the pupil pixels, and pupilPixel[1] stores the y-values of the pupil
+                                                                        # pixel. They have an one-to-one correspondence. E.g., for pixel i, pupilPixel[0][i] is the x-value of this
+                                                                        # pixel, while pupilPixel[1][i] is the y-value of this pixel..
+
+    xMin = min(pupilPixel[0])                                           # This is the left-most pixel of the pupil.     
+    xMax = max(pupilPixel[0])                                           # This is the right-most pixel of the pupil.
+    yMin = min(pupilPixel[1])                                           # This is the upper-most pixel of the pupil.
+    yMax = max(pupilPixel[1])                                           # This is the lower-most pixel of the pupil.
+
+    delta = (xMax - xMin) - (yMax - yMin)                               # We want to use this variabl to decide the center of the pupil. If the difference is larger from the horizontal
+                                                                        # axis, we will use the x-value to decide the center of the pupil. Similarly, if the vertical difference is larger,
+                                                                        # we will use the y-value to decide the center of the pupil.
+
+    if delta >= 0:
+        xCenter = int((xMin + xMax) / 2)
+        xMin_yMin = min(pupilPixel[1][np.where(pupilPixel[0] == xMin)])
+        xMin_yMax = max(pupilPixel[1][np.where(pupilPixel[0] == xMin)])
+        xMin_yCenter = (xMin_yMin + xMin_yMax) / 2
+        xMax_yMin = min(pupilPixel[1][np.where(pupilPixel[0] == xMax)])
+        xMax_yMax = max(pupilPixel[1][np.where(pupilPixel[0] == xMax)])
+        xMax_yCenter = (xMax_yMin + xMax_yMax) / 2
+        yCenter = int((xMin_yCenter + xMax_yCenter) / 2)
+    elif delta < 0:
+        yCenter = int((yMin + yMax) / 2)
+        yMin_xMin = min(pupilPixel[0][np.where(pupilPixel[1] == yMin)])
+        yMin_xMax = max(pupilPixel[0][np.where(pupilPixel[1] == yMin)])
+        yMin_xCenter = (yMin_xMin + yMin_xMax) / 2
+        yMax_xMin = min(pupilPixel[0][np.where(pupilPixel[1] == yMax)])
+        yMax_xMax = max(pupilPixel[0][np.where(pupilPixel[1] == yMax)])
+        yMax_xCenter = (yMax_xMin + yMax_xMax) / 2
+        xCenter = int((yMin_xCenter + yMax_xCenter) / 2)
+
+    return xCenter, yCenter
+
 def total_metric(nparams,miou):
     S = nparams * 4.0 /  (1024 * 1024)
     total = min(1,1.0/S) + miou
