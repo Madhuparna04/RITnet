@@ -104,7 +104,7 @@ if __name__ == '__main__':
 
             deltaX = (xCenter - 320) / 500 * 6.95	# This is the conversion from a pixel to inch.
             deltaY = (yCenter - 200) / 500 * 6.95	# Same as above.
-            vector = [deltaX, deltaY, dist]		# This is the vectore from the pupil to the eye-tracking camera
+            vector = [deltaX, deltaY, dist]		# This is the vectore from the pupil to the eye-tracking camera.
 
 
             # The following for-loop is used to save the segmentation results.

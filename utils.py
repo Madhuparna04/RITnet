@@ -194,7 +194,7 @@ def getCoordinates(predict):
     pupilPixel = np.where(predict[0].cpu().numpy() == 3)		# There are four values (0, 1, 2, 3) in the segmentation result arrays. Value 3 indicates the pixel for pupil.
                                                                         # pupilPixel[0] hass the x-values of the pupil pixels, and pupilPixel[1] stores the y-values of the pupil
                                                                         # pixel. They have an one-to-one correspondence. E.g., for pixel i, pupilPixel[0][i] is the x-value of this
-                                                                        # pixel, while pupilPixel[1][i] is the y-value of this pixel.
+                                                                        # pixel, while pupilPixel[1][i] is the y-value of this pixel..
 
     xMin = min(pupilPixel[0])						# This is the left-most pixel of the pupil.	
     xMax = max(pupilPixel[0])						# This is the right-most pixel of the pupil.
