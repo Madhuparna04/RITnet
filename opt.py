@@ -7,7 +7,7 @@ def parse_args():
     # Data input settings
     parser.add_argument('--dataset', type=str, default='Semantic_Segmentation_Dataset/', help='name of dataset')
     # Optimization: General
-    parser.add_argument('--bs', type=int, default = 8 )
+    parser.add_argument('--bs', type=int, default = 1 )
     parser.add_argument('--epochs', type=int,help='Number of epochs',default= 250)
     parser.add_argument('--workers', type=int,help='Number of workers',default=4)
     parser.add_argument('--model', help='model name',default='densenet')
@@ -34,7 +34,3 @@ if __name__ == '__main__':
 
     opt = parse_args()
     print('opt[\'dataset\'] is ', opt.dataset)
-
-
-
-

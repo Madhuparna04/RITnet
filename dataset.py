@@ -19,7 +19,7 @@ Train Image Augmentation Procedure Followed
 4) Gaussian blur with kernel size (7,7) and random sigma with 20% probability. 
 5) Translation of image and labels in any direction with random factor less than 20.
 """
-
+import time
 import numpy as np
 import torch
 from torch.utils.data import Dataset 
@@ -122,6 +122,7 @@ class MaskToTensor(object):
 
   
 class IrisDataset(Dataset):
+    
     def __init__(self, filepath, split='train',transform=None,**args):
         self.transform = transform
         self.filepath= osp.join(filepath,split)
@@ -139,22 +140,27 @@ class IrisDataset(Dataset):
         #local Contrast limited adaptive histogram equalization algorithm
         self.clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8,8))
 
+
     def __len__(self):
         if self.testrun:
             return 10
         return len(self.list_files)
 
     def __getitem__(self, idx):
+        start_get_item  =time.time()
         imagepath = osp.join(self.filepath,'images',self.list_files[idx]+'.png')
         pilimg = Image.open(imagepath).convert("L")
         H, W = pilimg.width , pilimg.height
        
         #PREPROCESSING STEP FOR ALL TRAIN, VALIDATION AND TEST INPUTS 
-        #Fixed gamma value for      
+        #Fixed gamma value for      RAHUL:: gamma correction time needs to be instrumented
+        # start_gamma = time.time()
         table = 255.0*(np.linspace(0, 1, 256)**0.8)
         pilimg = cv2.LUT(np.array(pilimg), table)
+        # gamma_time = (time.time() - start_gamma)
+        # print(gamma_time)
         
-
+        
         if self.split != 'test':
             labelpath = osp.join(self.filepath,'labels',self.list_files[idx]+'.npy')
             label = np.load(labelpath)    
@@ -171,10 +177,12 @@ class IrisDataset(Dataset):
                     pilimg = Gaussian_blur()(np.array(pilimg))   
                 if random.random() < 0.4:
                     pilimg, label = Translation()(np.array(pilimg),np.array(label))
-                
+        # RAHUL :: Step 2 for image processing and histogram - nees to be instrumented (line 175-176)
+        # histo_begin = time.time()
         img = self.clahe.apply(np.array(np.uint8(pilimg)))    
         img = Image.fromarray(img)      
-            
+        # histo_end = time.time() - histo_begin
+        # print(histo_end)
         if self.transform is not None:
             if self.split == 'train':
                 img, label = RandomHorizontalFlip()(img,label)
@@ -200,6 +208,7 @@ class IrisDataset(Dataset):
             return img,0,self.list_files[idx],0,0
             
         label = MaskToTensor()(label)
+        # print(time.time() - start_get_item)
         return img, label, self.list_files[idx],spatialWeights,np.float32(distMap) 
 
 if __name__ == "__main__":
