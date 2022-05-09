@@ -4,13 +4,21 @@
 #include <iostream>
 #include <string>
 #include <chrono>
+#include <fstream>
+#include <filesystem>
 
 #include "common/switchboard.hpp"
 #include "common/threadloop.hpp"
 #include "common/data_format.hpp"
 
+namespace fs = std::filesystem;
 using namespace ILLIXR;
 
+std::string path = "/home/madhuparna/ILLIXR_Copy/RITnet/Semantic_Segmentation_Dataset/test/images";
+fs::directory_iterator end_itr;
+fs::directory_iterator entry( path );
+
+int read_images = 0;
 #define WAITKEY (1)
 
 class eye_tracking : public plugin {
@@ -22,13 +30,13 @@ public:
         , gamma_lut_(1, GAMMA_LUT_SIZE, CV_8U)
     {
         try {
-            ritnet_ = torch::jit::load("/scratch/huzaifa2/ILLIXR/eye_tracking/ritnet.pt");
+            ritnet_ = torch::jit::load("/home/madhuparna/ILLIXR_Copy/RITnet/ritnet.pt");
             ritnet_.eval();
             ritnet_.to(device_);
         } catch (const c10::Error &e) {
             std::cerr << "Could not load RITnet model from disk\n";
             std::cerr << e.msg() << std::endl;
-            abort();
+            ILLIXR::abort();
         }
 
         // Generate CLAHE object
@@ -52,14 +60,26 @@ public:
         if(!datum->img0.has_value() && !datum->img1.has_value()) {
             return;
         }
+        
 
 #ifndef NDEBUG
         auto preprocess_start = std::chrono::high_resolution_clock::now();
 #endif
 
         // Extract images
-        cv::Mat img0{*datum->img0.value()};
-        cv::Mat img1{*datum->img1.value()};
+        cv::Mat img0{datum->img0.value()};
+        cv::Mat img1{datum->img1.value()};
+	
+        //Reading images from a folder and performimg segmentation, ellipse fitting and gaze tracking on it
+	 if (entry != end_itr) {
+	         img0 = cv::imread((cv::String)entry->path(),  cv::IMREAD_GRAYSCALE);
+	         entry++;
+	 }
+        //Reading consecutive two images. Ideally needs to be left and right eye.
+	 if (entry != end_itr) {
+		 img1 = cv::imread((cv::String)entry->path(),  cv::IMREAD_GRAYSCALE);
+		 entry++;
+	 }
 
 #ifndef NDEBUG
         cv::imshow("img0 Original", img0);
@@ -68,9 +88,11 @@ public:
         cv::waitKey(WAITKEY);
 #endif
 
-        // Convert to grayscale
+        // Convert to grayscale (Needed only if images are colores, currently all images read are already grayscale)
+        /*
         cv::cvtColor(img0, img0, cv::COLOR_BGR2GRAY);
         cv::cvtColor(img1, img1, cv::COLOR_BGR2GRAY);
+        */
 
 #ifndef NDEBUG
         cv::imshow("img0 Grayscale", img0);
@@ -78,7 +100,6 @@ public:
         cv::imshow("img1 Grayscale", img1);
         cv::waitKey(WAITKEY);
 #endif
-
         // Transpose
         cv::transpose(img0, img0);
         cv::transpose(img1, img1);
@@ -127,15 +148,19 @@ public:
         auto preprocess_stop = std::chrono::high_resolution_clock::now();
         std::cout << "Preprocessing time: " << std::chrono::duration_cast<std::chrono::microseconds>(preprocess_stop - preprocess_start).count() << " us\n";
 #endif
-
         // Perform segmentation
         segment(img0, img1);
+        return;
+        
     };
 
     // Segments the two input images into pupil, iris, sclera, and none-of-the-above, and
     // publishes the segmented images on the "eye_segmentation" topic on switchboard. The
     // images must be 400x640 in CV_8UC1 format.
     void segment(cv::Mat &img0, cv::Mat &img1) {
+
+    	cv::imwrite( "results_ritnet/" + std::to_string(read_images) + "_before_segment.png", img0 );
+    	cv::imwrite( "results_ritnet/" + std::to_string(read_images+1) + "_before_segment.png", img1 );
         // Convert images to tensors and batch them together
         auto tensor0 = mat_to_tensor(img0);
         auto tensor1 = mat_to_tensor(img1);
@@ -156,6 +181,7 @@ public:
 #ifndef NDEBUG
         auto segment_stop = std::chrono::high_resolution_clock::now();
         std::cout << "Segmentation time: " << std::chrono::duration_cast<std::chrono::microseconds>(segment_stop - segment_start).count() << " us\n";
+        
 #endif
 
         // Make sure output shape looks good: NxCxHxW == 2x4x640x400
@@ -176,8 +202,12 @@ public:
         auto seg_tensor1 = pixels.narrow(0, 1, 1).squeeze();
 
         // Convert tensors to segmented images
-        auto seg_img0 = tensor_to_mat(seg_tensor0);
-        auto seg_img1 = tensor_to_mat(seg_tensor1);
+        auto rows = static_cast<int>(seg_tensor0.size(0));
+        auto cols = static_cast<int>(seg_tensor0.size(1));
+        cv::Mat seg_img0 = cv::Mat{rows, cols, CV_32FC1, seg_tensor0.data_ptr<float>()};
+        rows = static_cast<int>(seg_tensor1.size(0));
+        cols = static_cast<int>(seg_tensor1.size(1));
+        cv::Mat seg_img1 = cv::Mat{rows, cols, CV_32FC1, seg_tensor1.data_ptr<float>()};
 
 #ifndef NDEBUG
         cv::imshow("img0 Segmented", seg_img0);
@@ -185,12 +215,88 @@ public:
         cv::imshow("img1 Segmented", seg_img1);
         cv::waitKey(WAITKEY);
 #endif
-
         // Publish images
-        eye_segmentation_->put(new eye_segmentation{
-            .img0 = new cv::Mat{seg_img0},
-            .img1 = new cv::Mat{seg_img1}
-        });
+        cv::imwrite( "results_ritnet/" + std::to_string(read_images) + "_after_segment.png", 255*seg_img0 );
+    	cv::imwrite( "results_ritnet/" + std::to_string(read_images+1) + "_after_segment.png", 255*seg_img1 );
+
+
+	 //Ideally should be a new plugin that read the segmented image
+        ellipse_fit(seg_img0);
+        read_images += 1;
+        ellipse_fit(seg_img1);
+        read_images += 1;
+        
+        eye_segmentation_.put(eye_segmentation_.allocate<eye_segmentation>(
+	   	eye_segmentation{
+           	new cv::Mat{seg_img0},
+           	new cv::Mat{seg_img1}
+        	}
+	));
+       
+    }
+
+void ellipse_fit(cv::Mat img) {
+	cv::Mat src = img;
+        cv::Mat src_gray;
+        
+	src.convertTo(src_gray, CV_8UC1);
+        int thresh = 100;
+
+        src_gray = 255*src_gray;
+        cv::blur( src_gray, src_gray, cv::Size(3,3) );  
+        
+        auto start = std::chrono::high_resolution_clock::now();
+  
+        cv::Mat canny_output;
+        cv::Canny( src_gray, canny_output, thresh, thresh*2 );
+        std::vector<std::vector<cv::Point> > contours;
+        std::vector<cv::Vec4i> hierarchy;
+
+        cv::findContours( canny_output, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE );
+        cv::Mat drawing = cv::Mat::zeros( canny_output.size(), CV_8UC3 );
+        float mini_area = 0;
+        int final_index = 0;
+        cv::RotatedRect final_box;
+        std::cout<<"Contours found"<< contours.size() <<std::endl;
+
+        for( size_t i = 0; i< contours.size(); i++ )
+        {
+        	if (contours[i].size() < 5)
+        		continue;
+                cv::Mat pointsf;
+                cv::Mat(contours[i]).convertTo(pointsf, CV_32F);
+                cv::RotatedRect box = cv::fitEllipse(pointsf);
+                //Removing disproportionate i.e. extremely long contours
+                if( MAX(box.size.width, box.size.height) > MIN(box.size.width, box.size.height)*30 )
+                        continue;
+                else {
+                        if (box.size.height * box.size.width > mini_area) {
+                                mini_area = box.size.height * box.size.width;
+                                final_index = i;
+                                final_box = box;
+                        }
+                }
+        }
+        if (mini_area == 0) {
+        	std::cout<<" no valid contours"<<std::endl;
+        	return;
+        }
+        cv::RNG rng(12345);
+        cv::Scalar color = cv::Scalar( rng.uniform(0, 256), rng.uniform(0,256), rng.uniform(0,256) );
+        cv::drawContours( drawing, contours, (int)final_index, color, 2, cv::LINE_8, hierarchy, 0 );
+        cv::ellipse(drawing, final_box.center, final_box.size*0.5f, final_box.angle, 0, 360, cv::Scalar(0,255,255), 1, cv::LINE_AA);
+        cv::Point2f vtx[4];
+        final_box.points(vtx);
+        for( int j = 0; j < 4; j++ )
+                cv::line(drawing, vtx[j], vtx[(j+1)%4], cv::Scalar(0,255,0), 1, cv::LINE_AA);
+
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::cout << "Ellipse Fitting time: " << std::chrono::duration_cast<std::chrono::microseconds>(stop - start).count() << " us\n";
+
+    	cv::imwrite( "results_ritnet/" + std::to_string(read_images) + "_ellipse.png", drawing );
+        float foveaX = round((final_box.center.x - 200) / 2.42 * (2.42 + 5) + 1080);
+        float foveaY = round((final_box.center.y - 320) / 2.42 * (2.42 + 5) + 600);
+        std::cout<< "Image number "<< read_images << " foveaX " << foveaX << " foveaY " << foveaY << std::endl;
     }
 
 private:

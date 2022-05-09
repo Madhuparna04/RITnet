@@ -1,6 +1,53 @@
 **This is part of [ILLIXR](https://github.com/ILLIXR/ILLIXR), the Illinios Extended Reality Benchmark Suite. The following explains how to use RITnet. The code is based on Python3, and the profiling results are based on ```test.py```.
 For the testing images, the size per image should be 640 * 400 in gray scale. Please put them under ```Semantic_Segmentation_Dataset/test/images```.**
 
+# How to run RITnet with ILLIXR
+
+Follow these steps to run RITnet segmentation along with ellipse fitting and gaze tracking in C++ with ILLIXR:
+1. Add this RITnet folder inside ILLIXR directory.
+2. Add the native_eye_track.yaml file inside ILLIXR/configs folder.
+3. Modify ILLIXR/common/data_format.hpp to dd the following data structure:
+  ```
+  	//Eye tracking data structure
+	
+
+    struct eye_segmentation : public switchboard::event {
+
+        cv::Mat* img0;
+
+        cv::Mat* img1;
+
+        eye_segmentation(cv::Mat* img0_, cv::Mat* img1_)
+
+            : img0{img0_}
+
+            , img1{img1_}
+
+        { }
+
+    };
+
+  ```
+  4. Change Line 17 of RITnet/plugin.cpp to the folder where openEDS data is saved. 4 sample images are present in the Semantic Segmentation folder of this repository.
+  5. Change LIne 33 to point to the ritnet.pt file present in this folder.
+  6. Create a folder named results_ritnet inside ILLIXR/ directory. All the segmented and ellipse fit images will be saved in this folder.
+  7. Make sure libtorch is present in /opt/ILLIXR.
+  8. To run the code, use the following command from inside the ILLIXR directory:
+  ```
+./runner.sh configs/native_eye_track.yaml  > out.txt 2>&1
+  ```
+
+  All the outputs will be stored in out.txt. You can open and search this file for the following important values:
+  
+  1. Segmentation time.
+  2. Ellipse Fitting time.
+  3. Image number with the FoveaX and FoveaY values.
+
+## Implementation Details
+  Some important implementation details:
+  1. Currently, the images subscribed by the RITnet plugin is that of a room, to bypass that the current code is reading from a folder wuth eye images. After all the images in the folder are read, it by default uses the room images thereafter.
+  2. Currently the ellipse with the largest area is used as the heuristic to choose the ellipse. We cannot use the color based method to find the pupil because the dataset has grayscale images so the output of segmentation is also grayscale. This can be changes once the colored dataset is available.
+
 # RITnet
 
 RITnet is the winnning model of the OpenEDS Semantic Segmentation Challenge. If you use this code, please cite:
